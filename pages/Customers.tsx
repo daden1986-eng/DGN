@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Customer, SubscriptionType, Transaction, TransactionType, PaymentMethod } from '../types';
-import { MessageCircle, CreditCard, Trash2, Edit2, FileText, Plus, CheckCircle, Search, AlertCircle } from 'lucide-react';
+import { MessageCircle, CreditCard, Trash2, Edit2, FileText, Plus, CheckCircle, Search, AlertCircle, RefreshCw } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export const Customers: React.FC = () => {
-  const { customers, setCustomers, addTransaction, settings } = useApp();
+  const { customers, setCustomers, addTransaction, settings, generateNewBillingCycle } = useApp();
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isEditMode, setEditMode] = useState(false);
@@ -29,6 +29,7 @@ export const Customers: React.FC = () => {
   const handleOpenAdd = () => {
     setEditMode(false);
     setFormData({ 
+      id: '', // Allow manual input
       status: 'unpaid', 
       monthlyFee: 0, 
       accumulatedDebt: 0,
@@ -46,12 +47,22 @@ export const Customers: React.FC = () => {
 
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (isEditMode && formData.id) {
       setCustomers(prev => prev.map(c => c.id === formData.id ? { ...c, ...formData } as Customer : c));
     } else {
+      // Logic for new customer
+      const finalId = formData.id && formData.id.trim() !== '' ? formData.id : `C${Date.now()}`;
+
+      // Check for duplicate ID
+      if (customers.some(c => c.id === finalId)) {
+        alert(`ID Pelanggan "${finalId}" sudah digunakan! Silahkan gunakan ID lain.`);
+        return;
+      }
+
       const newCustomer = { 
         ...formData, 
-        id: `C${Date.now()}`, 
+        id: finalId, 
         status: 'unpaid',
         accumulatedDebt: 0,
         // Ensure remaining balance is set if not already
@@ -70,26 +81,9 @@ export const Customers: React.FC = () => {
   };
 
   const handleGenerateBills = () => {
-    if (confirm('Generate tagihan baru untuk semua pelanggan?\n\n- Status akan menjadi Belum Bayar\n- Tagihan yang belum lunas akan diakumulasikan\n- Sisa nominal tahunan akan berkurang')) {
-      setCustomers(prev => prev.map(c => {
-        // Logic:
-        // 1. Decrease remaining annual balance by monthly fee (floor at 0)
-        const newAnnualBalance = Math.max(0, c.remainingAnnualBalance - c.monthlyFee);
-        
-        // 2. Accumulate debt if previous month was unpaid
-        let newDebt = c.accumulatedDebt;
-        if (c.status === 'unpaid') {
-            newDebt += c.monthlyFee;
-        }
-
-        return { 
-          ...c, 
-          status: 'unpaid',
-          remainingAnnualBalance: newAnnualBalance,
-          accumulatedDebt: newDebt
-        };
-      }));
-      alert('Tagihan bulan baru berhasil digenerate!');
+    if (confirm('Mulai Siklus Tagihan Baru untuk semua pelanggan?\n\n- Tagihan bulan baru akan dibuat (Status: Belum Bayar)\n- Tagihan yang belum lunas sebelumnya akan diakumulasikan ke tunggakan\n- Sisa nominal kontrak tahunan akan berkurang')) {
+      generateNewBillingCycle();
+      alert('Siklus Tagihan Baru Berhasil Diterapkan!');
     }
   };
 
@@ -173,7 +167,8 @@ export const Customers: React.FC = () => {
     doc.text(customer.name, 15, 61);
     doc.setFont("helvetica", "normal");
     doc.text(customer.phone, 15, 66);
-    doc.text(`Paket: ${customer.type}`, 15, 71);
+    doc.text(`ID: ${customer.id}`, 15, 71); // Added ID here too
+    doc.text(`Paket: ${customer.type}`, 15, 76);
 
     doc.setFontSize(9);
     doc.text(`No. Invoice: INV/${dateNow.getFullYear()}/${dateNow.getTime().toString().substr(-5)}`, pageWidth - 15, 61, { align: "right" });
@@ -190,7 +185,7 @@ export const Customers: React.FC = () => {
     }
 
     autoTable(doc, {
-      startY: 80,
+      startY: 85,
       head: [['No', 'Deskripsi', 'Total']],
       body: tableRows,
       theme: 'grid',
@@ -248,7 +243,8 @@ export const Customers: React.FC = () => {
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.phone.includes(searchQuery)
+    c.phone.includes(searchQuery) ||
+    c.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -256,8 +252,8 @@ export const Customers: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-2xl font-bold text-white">Data Pelanggan</h2>
         <div className="flex flex-wrap gap-3">
-           <button onClick={handleGenerateBills} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
-             + Tagihan Bulan Baru
+           <button onClick={handleGenerateBills} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+             <RefreshCw size={16} /> Siklus Tagihan Baru
            </button>
            <button onClick={handleOpenAdd} className="bg-accent hover:bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition">
              <Plus size={16} /> <span>Tambah Pelanggan</span>
@@ -273,7 +269,7 @@ export const Customers: React.FC = () => {
         <input
           type="text"
           className="block w-full pl-10 pr-3 py-2 border border-slate-600 rounded-lg leading-5 bg-slate-800 text-slate-300 placeholder-slate-400 focus:outline-none focus:bg-slate-900 focus:border-accent sm:text-sm transition duration-150 ease-in-out"
-          placeholder="Cari nama pelanggan atau nomor HP..."
+          placeholder="Cari ID, Nama, atau No HP..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -284,6 +280,7 @@ export const Customers: React.FC = () => {
           <table className="w-full text-left text-slate-300">
             <thead className="bg-slate-900 text-slate-100 uppercase text-xs font-bold">
               <tr>
+                <th className="p-4">ID</th>
                 <th className="p-4">Nama / Paket</th>
                 <th className="p-4">No HP</th>
                 <th className="p-4">Iuran Bulanan</th>
@@ -299,6 +296,7 @@ export const Customers: React.FC = () => {
                   const totalBill = c.monthlyFee + c.accumulatedDebt;
                   return (
                     <tr key={c.id} className="hover:bg-slate-700/50 transition">
+                      <td className="p-4 font-mono text-xs text-slate-400">{c.id}</td>
                       <td className="p-4">
                         <div className="font-bold text-white">{c.name}</div>
                         <div className="text-xs text-slate-400">{c.type} - Tgl {c.dueDate}</div>
@@ -341,7 +339,7 @@ export const Customers: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={8} className="p-8 text-center text-slate-500">
                     Tidak ada data pelanggan yang cocok.
                   </td>
                 </tr>
@@ -395,6 +393,19 @@ export const Customers: React.FC = () => {
           <div className="bg-slate-800 p-6 rounded-xl shadow-2xl max-w-md w-full border border-slate-600 my-10">
             <h3 className="text-xl font-bold text-white mb-4">{isEditMode ? 'Edit Pelanggan' : 'Tambah Pelanggan Baru'}</h3>
             <form onSubmit={handleSaveCustomer} className="space-y-4">
+              {/* New ID Field */}
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">ID Pelanggan</label>
+                <input 
+                  type="text" 
+                  value={formData.id || ''} 
+                  onChange={e => setFormData({...formData, id: e.target.value})} 
+                  disabled={isEditMode}
+                  placeholder={isEditMode ? "" : "Kosongkan untuk Auto-Generate"}
+                  className={`w-full border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none ${isEditMode ? 'bg-slate-700 cursor-not-allowed' : 'bg-slate-900'}`} 
+                />
+              </div>
+
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Nama Pelanggan</label>
                 <input required type="text" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none" />
@@ -420,7 +431,7 @@ export const Customers: React.FC = () => {
                 </div>
               </div>
               
-              {/* New Annual Calculation Display */}
+              {/* Annual Calculation Display */}
               <div className="grid grid-cols-2 gap-4 bg-slate-900 p-3 rounded border border-slate-700">
                  <div>
                     <label className="block text-[10px] text-slate-500 mb-1">Nominal 1 Tahun</label>

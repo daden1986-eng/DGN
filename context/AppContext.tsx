@@ -8,6 +8,7 @@ interface AppContextType extends AppState {
   setSettings: React.Dispatch<React.SetStateAction<CompanySettings>>;
   setInvestors: React.Dispatch<React.SetStateAction<Investor[]>>;
   addTransaction: (t: Transaction) => void;
+  generateNewBillingCycle: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -44,13 +45,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions(prev => [t, ...prev]);
   };
 
+  const generateNewBillingCycle = () => {
+    setCustomers(prev => prev.map(c => {
+      // Logic:
+      // 1. Decrease remaining annual balance by monthly fee (floor at 0)
+      const newAnnualBalance = Math.max(0, c.remainingAnnualBalance - c.monthlyFee);
+      
+      // 2. Accumulate debt if previous month was unpaid
+      let newDebt = c.accumulatedDebt;
+      if (c.status === 'unpaid') {
+          newDebt += c.monthlyFee;
+      }
+
+      return { 
+        ...c, 
+        status: 'unpaid', // New month is always unpaid initially
+        remainingAnnualBalance: newAnnualBalance,
+        accumulatedDebt: newDebt
+      };
+    }));
+  };
+
+  // Automatic Billing Cycle Check (Runs on Mount)
+  useEffect(() => {
+    const now = new Date();
+    const currentDay = now.getDate();
+    
+    // Check if today is the 1st of the month
+    if (currentDay === 1) {
+      const cycleKey = `dgn_auto_bill_${now.getFullYear()}_${now.getMonth() + 1}`;
+      const hasRun = localStorage.getItem(cycleKey);
+
+      if (!hasRun) {
+        console.log(`[Auto Billing] Running for ${cycleKey}`);
+        generateNewBillingCycle();
+        localStorage.setItem(cycleKey, 'true');
+      }
+    }
+  }, []);
+
   return (
     <AppContext.Provider value={{
       customers, setCustomers,
       transactions, setTransactions,
       settings, setSettings,
       investors, setInvestors,
-      addTransaction
+      addTransaction,
+      generateNewBillingCycle
     }}>
       {children}
     </AppContext.Provider>
