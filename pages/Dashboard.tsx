@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { 
   ResponsiveContainer, 
-  AreaChart, 
   Area, 
   XAxis, 
   YAxis, 
@@ -13,6 +12,7 @@ import {
 } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { TransactionType, PaymentMethod } from '../types';
+import { TrendingUp, ArrowDownRight, Wallet, CreditCard, Banknote } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const { transactions } = useApp();
@@ -44,28 +44,14 @@ export const Dashboard: React.FC = () => {
 
   // Process Data for Trading Traffic Chart
   const chartData = useMemo(() => {
-    // 1. Sort transactions by date
     const sortedTx = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    // 2. Group by date
     const grouped = sortedTx.reduce((acc, curr) => {
       const date = curr.date;
       if (!acc[date]) {
-        acc[date] = { 
-          date, 
-          income: 0, 
-          expense: 0, 
-          cash: 0, 
-          transfer: 0,
-          net: 0
-        };
+        acc[date] = { date, income: 0, expense: 0, cash: 0, transfer: 0 };
       }
-      
-      if (curr.type === TransactionType.INCOME) {
-        acc[date].income += curr.amount;
-      } else {
-        acc[date].expense += curr.amount;
-      }
+      if (curr.type === TransactionType.INCOME) acc[date].income += curr.amount;
+      else acc[date].expense += curr.amount;
 
       if (curr.method === PaymentMethod.CASH) acc[date].cash += curr.amount;
       if (curr.method === PaymentMethod.TRANSFER) acc[date].transfer += curr.amount;
@@ -73,85 +59,107 @@ export const Dashboard: React.FC = () => {
       return acc;
     }, {} as Record<string, any>);
 
-    // 3. Convert to array and calculate Cumulative Saldo
     let runningSaldo = 0;
     const result = Object.keys(grouped).sort().map(date => {
       const day = grouped[date];
       runningSaldo += (day.income - day.expense);
-      
-      // Format date for axis (e.g., 10 Oct)
       const dateObj = new Date(date);
       const formattedDate = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-
-      return {
-        ...day,
-        displayDate: formattedDate,
-        saldo: runningSaldo // "Hijau Muda"
-      };
+      return { ...day, displayDate: formattedDate, saldo: runningSaldo };
     });
 
     return result;
   }, [transactions]);
 
-  const formatCurrency = (value: number) => {
-    return `Rp ${value.toLocaleString('id-ID')}`;
-  };
+  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID')}`;
+
+  const Card = ({ title, value, icon: Icon, colorClass, details }: any) => (
+    <div className="relative group overflow-hidden rounded-2xl p-6 bg-white/5 backdrop-blur-md border border-white/10 transition-all duration-300 hover:bg-white/10 hover:shadow-xl hover:shadow-sky-500/5">
+      <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-500 ${colorClass}`}>
+        <Icon size={100} />
+      </div>
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-3">
+          <div className={`p-2 rounded-lg bg-white/5 ${colorClass} bg-opacity-20`}>
+            <Icon size={20} className={colorClass.replace('text-', 'text-')} />
+          </div>
+          <h3 className="text-slate-400 font-medium text-sm">{title}</h3>
+        </div>
+        
+        <p className="text-3xl font-bold text-white tracking-tight mb-6">
+          {formatCurrency(value)}
+        </p>
+
+        {details && (
+          <div className="space-y-2 border-t border-white/10 pt-3">
+            {details.map((d: any, i: number) => (
+              <div key={i} className="flex justify-between items-center text-xs text-slate-400">
+                <span className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full ${d.color}`}></span>
+                  {d.label}
+                </span>
+                <span className="font-mono text-slate-300">{formatCurrency(d.value)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6 p-6">
-      <h2 className="text-2xl font-bold text-white mb-6">Dashboard & Neraca</h2>
+    <div className="p-8 space-y-8 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Dashboard Overview</h2>
+          <p className="text-slate-400 mt-1">Ringkasan performa keuangan perusahaan Anda.</p>
+        </div>
+      </div>
       
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg relative overflow-hidden group">
-          <div className="absolute -right-4 -top-4 bg-green-500/10 w-24 h-24 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-          <h3 className="text-slate-400 text-sm mb-2 relative z-10">Total Saldo (Laba Bersih)</h3>
-          <p className="text-3xl font-bold text-green-400 relative z-10">Rp {summary.profit.toLocaleString('id-ID')}</p>
-        </div>
+        <Card 
+          title="Total Saldo (Laba Bersih)" 
+          value={summary.profit} 
+          icon={Wallet}
+          colorClass="text-emerald-400"
+        />
         
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg relative overflow-hidden group">
-          <div className="absolute -right-4 -top-4 bg-sky-500/10 w-24 h-24 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-          <h3 className="text-slate-400 text-sm mb-2 relative z-10">Total Pemasukan</h3>
-          <p className="text-3xl font-bold text-sky-400 relative z-10 mb-4">Rp {summary.income.toLocaleString('id-ID')}</p>
-          <div className="relative z-10 border-t border-slate-700 pt-2 mt-2">
-             <div className="flex justify-between text-xs text-slate-300 mb-1">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#854d0e]"></span> Transfer:</span>
-                <span className="font-mono">Rp {summary.incomeTransfer.toLocaleString('id-ID')}</span>
-             </div>
-             <div className="flex justify-between text-xs text-slate-300">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> Tunai:</span>
-                <span className="font-mono">Rp {summary.incomeCash.toLocaleString('id-ID')}</span>
-             </div>
-          </div>
-        </div>
+        <Card 
+          title="Total Pemasukan" 
+          value={summary.income} 
+          icon={TrendingUp}
+          colorClass="text-sky-400"
+          details={[
+            { label: 'Transfer', value: summary.incomeTransfer, color: 'bg-sky-500' },
+            { label: 'Tunai', value: summary.incomeCash, color: 'bg-emerald-500' }
+          ]}
+        />
         
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg relative overflow-hidden group">
-          <div className="absolute -right-4 -top-4 bg-red-500/10 w-24 h-24 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-          <h3 className="text-slate-400 text-sm mb-2 relative z-10">Total Pengeluaran</h3>
-          <p className="text-3xl font-bold text-red-400 relative z-10 mb-4">Rp {summary.expense.toLocaleString('id-ID')}</p>
-          <div className="relative z-10 border-t border-slate-700 pt-2 mt-2">
-             <div className="flex justify-between text-xs text-slate-300 mb-1">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#854d0e]"></span> Transfer:</span>
-                <span className="font-mono">Rp {summary.expenseTransfer.toLocaleString('id-ID')}</span>
-             </div>
-             <div className="flex justify-between text-xs text-slate-300">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> Tunai:</span>
-                <span className="font-mono">Rp {summary.expenseCash.toLocaleString('id-ID')}</span>
-             </div>
-          </div>
-        </div>
+        <Card 
+          title="Total Pengeluaran" 
+          value={summary.expense} 
+          icon={ArrowDownRight}
+          colorClass="text-rose-400"
+          details={[
+            { label: 'Transfer', value: summary.expenseTransfer, color: 'bg-rose-500' },
+            { label: 'Tunai', value: summary.expenseCash, color: 'bg-orange-500' }
+          ]}
+        />
       </div>
 
       {/* Traffic Trading Chart */}
-      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-white font-semibold text-lg">Visualisasi Arus Kas (Traffic)</h3>
-          <div className="flex flex-wrap gap-4 text-xs">
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-green-500 mr-2"></span>Pemasukan</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>Pengeluaran</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-[#86efac] mr-2"></span>Saldo</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></span>Tunai</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-[#854d0e] mr-2"></span>Transfer</div>
+      <div className="rounded-3xl p-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-2xl">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
+          <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+            <Banknote size={20} className="text-slate-400" />
+            Visualisasi Arus Kas
+          </h3>
+          <div className="flex flex-wrap justify-center gap-3 text-xs bg-black/20 p-2 rounded-full">
+            <div className="flex items-center px-2"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>Pemasukan</div>
+            <div className="flex items-center px-2"><span className="w-2 h-2 rounded-full bg-rose-500 mr-2 shadow-[0_0_10px_rgba(244,63,94,0.5)]"></span>Pengeluaran</div>
+            <div className="flex items-center px-2"><span className="w-2 h-2 rounded-full bg-sky-400 mr-2 shadow-[0_0_10px_rgba(56,189,248,0.5)]"></span>Saldo</div>
           </div>
         </div>
 
@@ -160,98 +168,32 @@ export const Dashboard: React.FC = () => {
             <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-              
-              <XAxis 
-                dataKey="displayDate" 
-                stroke="#94a3b8" 
-                tick={{fontSize: 12}}
-                tickMargin={10}
-              />
-              
-              <YAxis 
-                stroke="#94a3b8" 
-                tickFormatter={(val) => val >= 1000000 ? `${(val/1000000).toFixed(1)}M` : `${(val/1000).toFixed(0)}k`}
-                tick={{fontSize: 12}}
-              />
-              
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis dataKey="displayDate" stroke="#64748b" tick={{fontSize: 11}} tickMargin={15} axisLine={false} />
+              <YAxis stroke="#64748b" tickFormatter={(val) => val >= 1000000 ? `${(val/1000000).toFixed(1)}M` : `${(val/1000).toFixed(0)}k`} tick={{fontSize: 11}} axisLine={false} />
               <Tooltip 
-                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f1f5f9' }}
+                contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(8px)', borderColor: 'rgba(255,255,255,0.1)', color: '#f1f5f9', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
                 formatter={(value: number) => formatCurrency(value)}
-                labelStyle={{ color: '#94a3b8' }}
+                labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
+                cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
               />
-              
-              <Legend wrapperStyle={{ paddingTop: '20px' }}/>
-
-              {/* Benang Merah (Pengeluaran) */}
-              <Area 
-                type="monotone" 
-                dataKey="expense" 
-                name="Pengeluaran"
-                stroke="#ef4444" 
-                fillOpacity={1} 
-                fill="url(#colorExpense)" 
-                strokeWidth={2}
-              />
-
-              {/* Hijau (Pemasukan) */}
-              <Area 
-                type="monotone" 
-                dataKey="income" 
-                name="Pemasukan"
-                stroke="#22c55e" 
-                fillOpacity={1} 
-                fill="url(#colorIncome)" 
-                strokeWidth={2}
-              />
-
-              {/* Hijau Muda (Saldo) - Line Only */}
-              <Line 
-                type="monotone" 
-                dataKey="saldo" 
-                name="Saldo Akumulasi"
-                stroke="#86efac" 
-                strokeWidth={3} 
-                dot={{ r: 4, fill: '#86efac' }}
-                activeDot={{ r: 6 }}
-              />
-
-              {/* Kuning (Tunai) */}
-              <Line 
-                type="monotone" 
-                dataKey="cash" 
-                name="Metode Tunai"
-                stroke="#eab308" 
-                strokeWidth={2} 
-                strokeDasharray="5 5"
-                dot={false}
-              />
-
-              {/* Coklat (Transfer) */}
-              <Line 
-                type="monotone" 
-                dataKey="transfer" 
-                name="Metode Transfer"
-                stroke="#854d0e" // Brown color code
-                strokeWidth={2} 
-                strokeDasharray="5 5"
-                dot={false}
-              />
-
+              <Area type="monotone" dataKey="expense" name="Pengeluaran" stroke="#f43f5e" fillOpacity={1} fill="url(#colorExpense)" strokeWidth={2} />
+              <Area type="monotone" dataKey="income" name="Pemasukan" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={2} />
+              <Line type="monotone" dataKey="saldo" name="Saldo Akumulasi" stroke="#38bdf8" strokeWidth={3} dot={{ r: 4, fill: '#0ea5e9', strokeWidth: 0 }} activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} />
+              <Line type="monotone" dataKey="cash" name="Tunai" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 4" dot={false} />
+              <Line type="monotone" dataKey="transfer" name="Transfer" stroke="#a8a29e" strokeWidth={2} strokeDasharray="4 4" dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
-      
     </div>
   );
 };

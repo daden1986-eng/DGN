@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Customer, SubscriptionType, Transaction, TransactionType, PaymentMethod } from '../types';
-import { MessageCircle, CreditCard, Trash2, Edit2, FileText, Plus, CheckCircle, Search, AlertCircle, RefreshCw } from 'lucide-react';
+import { MessageCircle, CreditCard, Trash2, Edit2, FileText, Plus, CheckCircle, Search, AlertCircle, RefreshCw, X, Banknote } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -16,7 +16,6 @@ export const Customers: React.FC = () => {
   // Form state
   const [formData, setFormData] = useState<Partial<Customer>>({});
 
-  // Auto calculate annual balance when monthly fee changes in form
   useEffect(() => {
     if (formData.monthlyFee && !isEditMode) {
       setFormData(prev => ({
@@ -28,14 +27,7 @@ export const Customers: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditMode(false);
-    setFormData({ 
-      id: '', // Allow manual input
-      status: 'unpaid', 
-      monthlyFee: 0, 
-      accumulatedDebt: 0,
-      remainingAnnualBalance: 0,
-      dueDate: 1 
-    });
+    setFormData({ id: '', status: 'unpaid', monthlyFee: 0, accumulatedDebt: 0, remainingAnnualBalance: 0, dueDate: 1 });
     setAddModalOpen(true);
   };
 
@@ -47,25 +39,19 @@ export const Customers: React.FC = () => {
 
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (isEditMode && formData.id) {
       setCustomers(prev => prev.map(c => c.id === formData.id ? { ...c, ...formData } as Customer : c));
     } else {
-      // Logic for new customer
       const finalId = formData.id && formData.id.trim() !== '' ? formData.id : `C${Date.now()}`;
-
-      // Check for duplicate ID
       if (customers.some(c => c.id === finalId)) {
-        alert(`ID Pelanggan "${finalId}" sudah digunakan! Silahkan gunakan ID lain.`);
+        alert(`ID Pelanggan "${finalId}" sudah digunakan!`);
         return;
       }
-
       const newCustomer = { 
         ...formData, 
         id: finalId, 
         status: 'unpaid',
         accumulatedDebt: 0,
-        // Ensure remaining balance is set if not already
         remainingAnnualBalance: formData.remainingAnnualBalance || (formData.monthlyFee || 0) * 12
       } as Customer;
       setCustomers(prev => [...prev, newCustomer]);
@@ -74,24 +60,22 @@ export const Customers: React.FC = () => {
   };
 
   const handleDelete = (id: string) => {
-    // Prevent default browser behavior if called from a link/form context
-    if (window.confirm('Apakah Anda yakin ingin menghapus pelanggan ini? Data tidak bisa dikembalikan.')) {
+    if (window.confirm('Hapus data pelanggan ini?')) {
       setCustomers(prev => prev.filter(c => c.id !== id));
     }
   };
 
   const handleGenerateBills = () => {
-    if (confirm('Mulai Siklus Tagihan Baru untuk semua pelanggan?\n\n- Tagihan bulan baru akan dibuat (Status: Belum Bayar)\n- Tagihan yang belum lunas sebelumnya akan diakumulasikan ke tunggakan\n- Sisa nominal kontrak tahunan akan berkurang')) {
+    if (confirm('Mulai Siklus Tagihan Baru?')) {
       generateNewBillingCycle();
-      alert('Siklus Tagihan Baru Berhasil Diterapkan!');
+      alert('Siklus Baru Diterapkan!');
     }
   };
 
   const sendWhatsApp = (customer: Customer) => {
     const totalTagihan = customer.monthlyFee + customer.accumulatedDebt;
-    const message = `Halo kak ${customer.name}, tagihan internet Anda bulan ini:\n\nIuran Bulan Ini: Rp ${customer.monthlyFee.toLocaleString('id-ID')}\nTunggakan: Rp ${customer.accumulatedDebt.toLocaleString('id-ID')}\n*Total Tagihan: Rp ${totalTagihan.toLocaleString('id-ID')}*\n\nMohon segera melakukan pembayaran ya. Terima kasih! - ${settings.name}`;
-    const url = `https://wa.me/${customer.phone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    const message = `Halo kak ${customer.name}, tagihan internet bulan ini:\nTotal: Rp ${totalTagihan.toLocaleString('id-ID')}\nMohon segera dibayar ya. Terima kasih! - ${settings.name}`;
+    window.open(`https://wa.me/${customer.phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   const openPayment = (customer: Customer) => {
@@ -101,144 +85,67 @@ export const Customers: React.FC = () => {
 
   const processPayment = (method: PaymentMethod) => {
     if (!selectedCustomer) return;
-
     const totalAmount = selectedCustomer.monthlyFee + selectedCustomer.accumulatedDebt;
-
     const newTransaction: Transaction = {
       id: `T${Date.now()}`,
       date: new Date().toISOString().split('T')[0],
-      description: `Pembayaran Tagihan Internet - ${selectedCustomer.name} (${method})`,
+      description: `Pembayaran Internet - ${selectedCustomer.name} (${method})`,
       amount: totalAmount,
       type: TransactionType.INCOME,
       method: method,
       category: 'Bill Payment',
       customerId: selectedCustomer.id
     };
-
     addTransaction(newTransaction);
-    
-    // Reset status to paid and clear accumulated debt
     setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { 
-        ...c, 
-        status: 'paid', 
-        accumulatedDebt: 0, // Debt is cleared upon payment
-        lastPaymentDate: newTransaction.date 
+        ...c, status: 'paid', accumulatedDebt: 0, lastPaymentDate: newTransaction.date 
     } : c));
-
     setPaymentModalOpen(false);
-    alert('Pembayaran Berhasil Disimpan!');
   };
 
   const generateInvoicePDF = (customer: Customer) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
-    const centerX = pageWidth / 2;
-    
-    // Header
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(40, 40, 40);
-    doc.text(settings.name.toUpperCase(), centerX, 20, { align: "center" });
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 80);
-    doc.text(settings.address, centerX, 27, { align: "center" });
-    doc.text(`Telp: ${settings.phone}`, centerX, 32, { align: "center" });
-    
-    doc.setDrawColor(40, 40, 40);
-    doc.setLineWidth(0.5);
-    doc.line(15, 38, pageWidth - 15, 38);
-
-    // Title
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(0, 0, 0);
-    doc.text("INVOICE TAGIHAN", pageWidth - 15, 55, { align: "right" });
-
-    const dateNow = new Date();
-    const currentMonth = dateNow.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
     const totalAmount = customer.monthlyFee + customer.accumulatedDebt;
 
-    // Info
+    doc.setFontSize(22);
+    doc.setTextColor(30, 41, 59);
+    doc.text(settings.name.toUpperCase(), pageWidth / 2, 20, { align: "center" });
+    
     doc.setFontSize(10);
-    doc.text("Kepada Yth:", 15, 55);
-    doc.setFont("helvetica", "bold");
-    doc.text(customer.name, 15, 61);
-    doc.setFont("helvetica", "normal");
-    doc.text(customer.phone, 15, 66);
-    doc.text(`ID: ${customer.id}`, 15, 71); // Added ID here too
-    doc.text(`Paket: ${customer.type}`, 15, 76);
+    doc.setTextColor(100, 116, 139);
+    doc.text(settings.address, pageWidth / 2, 27, { align: "center" });
+    doc.setDrawColor(200, 200, 200);
+    doc.line(15, 35, pageWidth - 15, 35);
 
-    doc.setFontSize(9);
-    doc.text(`No. Invoice: INV/${dateNow.getFullYear()}/${dateNow.getTime().toString().substr(-5)}`, pageWidth - 15, 61, { align: "right" });
-    doc.text(`Tanggal: ${dateNow.toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}`, pageWidth - 15, 66, { align: "right" });
-    doc.text(`Status: ${customer.status === 'paid' ? 'LUNAS' : 'BELUM BAYAR'}`, pageWidth - 15, 71, { align: "right" });
+    doc.setFontSize(14);
+    doc.setTextColor(15, 23, 42);
+    doc.text("INVOICE", 15, 45);
+    
+    doc.setFontSize(10);
+    doc.text(`ID: ${customer.id}`, 15, 52);
+    doc.text(`Nama: ${customer.name}`, 15, 57);
+    doc.text(`Tgl: ${new Date().toLocaleDateString('id-ID')}`, pageWidth - 15, 45, { align: "right" });
 
-    // Table
     const tableRows = [
-      ["1", `Iuran Internet Bulan ${currentMonth}`, `Rp ${customer.monthlyFee.toLocaleString('id-ID')}`],
+      ["1", "Iuran Bulanan", `Rp ${customer.monthlyFee.toLocaleString('id-ID')}`],
+      ...(customer.accumulatedDebt > 0 ? [["2", "Tunggakan", `Rp ${customer.accumulatedDebt.toLocaleString('id-ID')}`]] : [])
     ];
 
-    if (customer.accumulatedDebt > 0) {
-        tableRows.push(["2", "Tunggakan Bulan Sebelumnya", `Rp ${customer.accumulatedDebt.toLocaleString('id-ID')}`]);
-    }
-
     autoTable(doc, {
-      startY: 85,
-      head: [['No', 'Deskripsi', 'Total']],
+      startY: 65,
+      head: [['#', 'Deskripsi', 'Nominal']],
       body: tableRows,
       theme: 'grid',
-      headStyles: { 
-        fillColor: [15, 23, 42],
-        textColor: 255, 
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      columnStyles: {
-        0: { cellWidth: 15, halign: 'center' },
-        2: { halign: 'right', fontStyle: 'bold' }
-      }
+      headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+      styles: { fontSize: 10, cellPadding: 4 },
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 15;
-
-    // Payment Box
-    doc.setDrawColor(200, 200, 200);
-    doc.setFillColor(248, 250, 252); 
-    doc.roundedRect(15, finalY, 90, 50, 2, 2, 'FD');
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text("Metode Pembayaran", 20, finalY + 8);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.text("Silahkan melakukan pembayaran transfer ke:", 20, finalY + 16);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text(`${settings.bankName}`, 20, finalY + 24);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${settings.accountNumber}`, 20, finalY + 30);
-    doc.text(`a.n ${settings.accountHolder}`, 20, finalY + 36);
-
-    // Total
-    doc.setFont("helvetica", "bold");
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text("Total Tagihan", pageWidth - 15, finalY + 8, { align: "right" });
-    doc.setFontSize(16);
-    doc.setTextColor(14, 165, 233);
-    doc.text(`Rp ${totalAmount.toLocaleString('id-ID')}`, pageWidth - 15, finalY + 18, { align: "right" });
-
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.text("Hormat Kami,", pageWidth - 40, finalY + 35, { align: "center" });
-    doc.setFont("helvetica", "bold");
-    doc.text(settings.directorName, pageWidth - 40, finalY + 55, { align: "center" });
-
-    doc.save(`Invoice_${customer.name.replace(/\s+/g, '_')}.pdf`);
+    doc.text(`Total: Rp ${totalAmount.toLocaleString('id-ID')}`, pageWidth - 15, finalY, { align: "right" });
+    
+    doc.save(`Invoice_${customer.name}.pdf`);
   };
 
   const filteredCustomers = customers.filter(c => 
@@ -248,219 +155,172 @@ export const Customers: React.FC = () => {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-2xl font-bold text-white">Data Pelanggan</h2>
-        <div className="flex flex-wrap gap-3">
-           <button onClick={handleGenerateBills} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
-             <RefreshCw size={16} /> Siklus Tagihan Baru
+    <div className="p-8 max-w-7xl mx-auto space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Data Pelanggan</h2>
+          <p className="text-slate-400 text-sm mt-1">Kelola data langganan dan tagihan.</p>
+        </div>
+        <div className="flex gap-3">
+           <button onClick={handleGenerateBills} className="bg-orange-500/20 hover:bg-orange-500 text-orange-400 hover:text-white border border-orange-500/50 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-2">
+             <RefreshCw size={16} /> Siklus Tagihan
            </button>
-           <button onClick={handleOpenAdd} className="bg-accent hover:bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition">
-             <Plus size={16} /> <span>Tambah Pelanggan</span>
+           <button onClick={handleOpenAdd} className="bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-500/25 px-4 py-2 rounded-xl flex items-center gap-2 transition-all duration-300 transform hover:-translate-y-1">
+             <Plus size={18} /> <span>Tambah Baru</span>
            </button>
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-5 w-5 text-slate-400" />
+      <div className="relative group">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+          <Search className="h-5 w-5 text-slate-400 group-focus-within:text-sky-400 transition-colors" />
         </div>
         <input
           type="text"
-          className="block w-full pl-10 pr-3 py-2 border border-slate-600 rounded-lg leading-5 bg-slate-800 text-slate-300 placeholder-slate-400 focus:outline-none focus:bg-slate-900 focus:border-accent sm:text-sm transition duration-150 ease-in-out"
-          placeholder="Cari ID, Nama, atau No HP..."
+          className="block w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:bg-white/10 transition-all duration-300"
+          placeholder="Cari pelanggan berdasarkan ID, Nama, atau No HP..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
 
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-slate-300">
-            <thead className="bg-slate-900 text-slate-100 uppercase text-xs font-bold">
+            <thead className="bg-black/20 text-slate-400 uppercase text-xs font-bold tracking-wider">
               <tr>
-                <th className="p-4">ID</th>
-                <th className="p-4">Nama / Paket</th>
-                <th className="p-4">No HP</th>
-                <th className="p-4">Iuran Bulanan</th>
-                <th className="p-4">Total Tagihan</th>
-                <th className="p-4">Sisa 1 Tahun</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-center">Aksi</th>
+                <th className="p-5 font-medium">ID</th>
+                <th className="p-5 font-medium">Pelanggan</th>
+                <th className="p-5 font-medium">Tagihan</th>
+                <th className="p-5 font-medium">Status</th>
+                <th className="p-5 font-medium text-center">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-white/5">
               {filteredCustomers.length > 0 ? (
                 filteredCustomers.map((c) => {
                   const totalBill = c.monthlyFee + c.accumulatedDebt;
                   return (
-                    <tr key={c.id} className="hover:bg-slate-700/50 transition">
-                      <td className="p-4 font-mono text-xs text-slate-400">{c.id}</td>
-                      <td className="p-4">
-                        <div className="font-bold text-white">{c.name}</div>
-                        <div className="text-xs text-slate-400">{c.type} - Tgl {c.dueDate}</div>
+                    <tr key={c.id} className="hover:bg-white/5 transition-colors duration-200 group">
+                      <td className="p-5 font-mono text-xs text-slate-500">{c.id}</td>
+                      <td className="p-5">
+                        <div className="font-bold text-white text-base">{c.name}</div>
+                        <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                           <span className="bg-white/10 px-2 py-0.5 rounded text-[10px]">{c.type}</span>
+                           <span>{c.phone}</span>
+                        </div>
                       </td>
-                      <td className="p-4 text-sm">{c.phone}</td>
-                      <td className="p-4 text-sm">Rp {c.monthlyFee.toLocaleString('id-ID')}</td>
-                      <td className="p-4">
-                        <div className="font-bold text-accent">Rp {totalBill.toLocaleString('id-ID')}</div>
+                      <td className="p-5">
+                        <div className="font-bold text-slate-200">Rp {totalBill.toLocaleString('id-ID')}</div>
                         {c.accumulatedDebt > 0 && (
-                            <div className="text-xs text-red-400 flex items-center mt-1">
-                                <AlertCircle size={10} className="mr-1"/> Menunggak Rp {c.accumulatedDebt.toLocaleString('id-ID')}
+                            <div className="text-xs text-rose-400 flex items-center mt-1 bg-rose-400/10 px-2 py-1 rounded-lg w-fit">
+                                <AlertCircle size={10} className="mr-1"/> Menunggak
                             </div>
                         )}
                       </td>
-                      <td className="p-4 text-sm text-slate-400">Rp {c.remainingAnnualBalance.toLocaleString('id-ID')}</td>
-                      <td className="p-4">
+                      <td className="p-5">
                         {c.status === 'paid' ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <CheckCircle size={12} className="mr-1" /> Lunas
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
+                            <CheckCircle size={12} className="mr-1.5" /> Lunas
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-rose-500/20 text-rose-400 border border-rose-500/20">
                             Belum Bayar
                           </span>
                         )}
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button type="button" onClick={() => sendWhatsApp(c)} title="Kirim WA" className="p-2 bg-green-600/20 text-green-400 rounded hover:bg-green-600 hover:text-white transition"><MessageCircle size={16} /></button>
+                      <td className="p-5">
+                        <div className="flex items-center justify-center gap-2 opacity-70 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => sendWhatsApp(c)} className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg hover:bg-emerald-500 hover:text-white transition-all"><MessageCircle size={18} /></button>
                           {c.status === 'unpaid' && (
-                            <button type="button" onClick={() => openPayment(c)} title="Bayar" className="p-2 bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600 hover:text-white transition"><CreditCard size={16} /></button>
+                            <button onClick={() => openPayment(c)} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500 hover:text-white transition-all"><CreditCard size={18} /></button>
                           )}
-                          <button type="button" onClick={() => generateInvoicePDF(c)} title="Invoice PDF" className="p-2 bg-purple-600/20 text-purple-400 rounded hover:bg-purple-600 hover:text-white transition"><FileText size={16} /></button>
-                          <button type="button" onClick={() => handleOpenEdit(c)} title="Edit" className="p-2 bg-yellow-600/20 text-yellow-400 rounded hover:bg-yellow-600 hover:text-white transition"><Edit2 size={16} /></button>
-                          <button type="button" onClick={() => handleDelete(c.id)} title="Hapus" className="p-2 bg-red-600/20 text-red-400 rounded hover:bg-red-600 hover:text-white transition"><Trash2 size={16} /></button>
+                          <button onClick={() => generateInvoicePDF(c)} className="p-2 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500 hover:text-white transition-all"><FileText size={18} /></button>
+                          <button onClick={() => handleOpenEdit(c)} className="p-2 bg-amber-500/10 text-amber-400 rounded-lg hover:bg-amber-500 hover:text-white transition-all"><Edit2 size={18} /></button>
+                          <button onClick={() => handleDelete(c.id)} className="p-2 bg-rose-500/10 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white transition-all"><Trash2 size={18} /></button>
                         </div>
                       </td>
                     </tr>
                   )
                 })
               ) : (
-                <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
-                    Tidak ada data pelanggan yang cocok.
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="p-8 text-center text-slate-500 italic">Data tidak ditemukan.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Payment Modal */}
-      {isPaymentModalOpen && selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="bg-slate-800 p-6 rounded-xl shadow-2xl max-w-sm w-full border border-slate-600">
-            <h3 className="text-xl font-bold text-white mb-4">Pembayaran Tagihan</h3>
+      {/* Modals with Glassmorphism */}
+      {(isPaymentModalOpen || isAddModalOpen) && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animation-fade-in relative">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+              <h3 className="text-xl font-bold text-white">
+                {isPaymentModalOpen ? 'Pembayaran Tagihan' : (isEditMode ? 'Edit Pelanggan' : 'Tambah Pelanggan')}
+              </h3>
+              <button onClick={() => { setPaymentModalOpen(false); setAddModalOpen(false); }} className="text-slate-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
             
-            <div className="mb-6 bg-slate-900 p-4 rounded-lg border border-slate-700">
-                <div className="flex justify-between text-sm text-slate-400 mb-1">
-                    <span>Iuran Bulan Ini:</span>
-                    <span>Rp {selectedCustomer.monthlyFee.toLocaleString('id-ID')}</span>
-                </div>
-                {selectedCustomer.accumulatedDebt > 0 && (
-                    <div className="flex justify-between text-sm text-red-400 mb-2">
-                        <span>Tunggakan:</span>
-                        <span>Rp {selectedCustomer.accumulatedDebt.toLocaleString('id-ID')}</span>
+            <div className="p-6">
+              {isPaymentModalOpen && selectedCustomer ? (
+                 <div className="space-y-4">
+                    <div className="bg-black/20 p-4 rounded-xl border border-white/5 space-y-2">
+                        <div className="flex justify-between text-sm text-slate-400"><span>Tagihan:</span> <span>Rp {selectedCustomer.monthlyFee.toLocaleString()}</span></div>
+                        <div className="flex justify-between text-sm text-rose-400"><span>Tunggakan:</span> <span>Rp {selectedCustomer.accumulatedDebt.toLocaleString()}</span></div>
+                        <div className="border-t border-white/10 pt-2 flex justify-between text-lg font-bold text-sky-400"><span>Total:</span> <span>Rp {(selectedCustomer.monthlyFee + selectedCustomer.accumulatedDebt).toLocaleString()}</span></div>
                     </div>
-                )}
-                <div className="border-t border-slate-700 pt-2 flex justify-between text-white font-bold">
-                    <span>Total Bayar:</span>
-                    <span className="text-accent">Rp {(selectedCustomer.monthlyFee + selectedCustomer.accumulatedDebt).toLocaleString('id-ID')}</span>
-                </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button onClick={() => processPayment(PaymentMethod.TRANSFER)} className="p-4 bg-white/5 hover:bg-sky-600 hover:text-white rounded-xl border border-white/10 transition-all flex flex-col items-center gap-2 text-slate-300">
+                        <CreditCard size={24}/> <span className="text-sm font-medium">Transfer</span>
+                      </button>
+                      <button onClick={() => processPayment(PaymentMethod.CASH)} className="p-4 bg-white/5 hover:bg-emerald-600 hover:text-white rounded-xl border border-white/10 transition-all flex flex-col items-center gap-2 text-slate-300">
+                        <Banknote size={24}/> <span className="text-sm font-medium">Tunai</span>
+                      </button>
+                    </div>
+                 </div>
+              ) : (
+                <form onSubmit={handleSaveCustomer} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs text-slate-400 mb-1 ml-1">ID (Opsional)</label>
+                            <input type="text" value={formData.id || ''} onChange={e => setFormData({...formData, id: e.target.value})} disabled={isEditMode} placeholder="Auto" className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:border-sky-500/50 focus:bg-black/40 outline-none transition-all text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-slate-400 mb-1 ml-1">Jatuh Tempo (Tgl)</label>
+                            <input required type="number" min="1" max="31" value={formData.dueDate || ''} onChange={e => setFormData({...formData, dueDate: parseInt(e.target.value)})} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:border-sky-500/50 outline-none transition-all text-sm" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs text-slate-400 mb-1 ml-1">Nama Lengkap</label>
+                        <input required type="text" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:border-sky-500/50 outline-none transition-all text-sm" />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-slate-400 mb-1 ml-1">No WhatsApp</label>
+                        <input required type="text" value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:border-sky-500/50 outline-none transition-all text-sm" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs text-slate-400 mb-1 ml-1">Paket</label>
+                            <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as SubscriptionType})} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:border-sky-500/50 outline-none transition-all text-sm appearance-none">
+                                {Object.values(SubscriptionType).map(t => <option key={t} value={t} className="bg-slate-800">{t}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                             <label className="block text-xs text-slate-400 mb-1 ml-1">Iuran (Rp)</label>
+                             <input required type="number" value={formData.monthlyFee || ''} onChange={e => setFormData({...formData, monthlyFee: parseInt(e.target.value)})} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:border-sky-500/50 outline-none transition-all text-sm" />
+                        </div>
+                    </div>
+                    <button type="submit" className="w-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white py-3 rounded-xl font-semibold shadow-lg shadow-sky-500/20 transition-all transform active:scale-95 mt-2">Simpan Data</button>
+                </form>
+              )}
             </div>
-
-            <p className="text-slate-300 text-sm mb-4 text-center">Pilih metode pembayaran:</p>
-            
-            <div className="space-y-3">
-              <button onClick={() => processPayment(PaymentMethod.TRANSFER)} className="w-full p-3 bg-slate-700 hover:bg-accent text-white rounded-lg transition flex justify-between items-center">
-                <span>Transfer Bank</span> <CreditCard size={18}/>
-              </button>
-              <button onClick={() => processPayment(PaymentMethod.CASH)} className="w-full p-3 bg-slate-700 hover:bg-green-600 text-white rounded-lg transition flex justify-between items-center">
-                <span>Tunai (Cash)</span> <FileText size={18}/>
-              </button>
-            </div>
-            <button onClick={() => setPaymentModalOpen(false)} className="mt-6 w-full py-2 text-slate-400 hover:text-white text-sm">Batal</button>
           </div>
         </div>
       )}
-
-      {/* Add/Edit Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-slate-800 p-6 rounded-xl shadow-2xl max-w-md w-full border border-slate-600 my-10">
-            <h3 className="text-xl font-bold text-white mb-4">{isEditMode ? 'Edit Pelanggan' : 'Tambah Pelanggan Baru'}</h3>
-            <form onSubmit={handleSaveCustomer} className="space-y-4">
-              {/* New ID Field */}
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">ID Pelanggan</label>
-                <input 
-                  type="text" 
-                  value={formData.id || ''} 
-                  onChange={e => setFormData({...formData, id: e.target.value})} 
-                  disabled={isEditMode}
-                  placeholder={isEditMode ? "" : "Kosongkan untuk Auto-Generate"}
-                  className={`w-full border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none ${isEditMode ? 'bg-slate-700 cursor-not-allowed' : 'bg-slate-900'}`} 
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Nama Pelanggan</label>
-                <input required type="text" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">No HP (Format: 628...)</label>
-                <input required type="text" value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Jenis Langganan</label>
-                <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as SubscriptionType})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none">
-                  {Object.values(SubscriptionType).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Tgl Jatuh Tempo (1-31)</label>
-                  <input required type="number" min="1" max="31" value={formData.dueDate || ''} onChange={e => setFormData({...formData, dueDate: parseInt(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Iuran Bulanan (Rp)</label>
-                  <input required type="number" value={formData.monthlyFee || ''} onChange={e => setFormData({...formData, monthlyFee: parseInt(e.target.value)})} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white focus:border-accent focus:outline-none" />
-                </div>
-              </div>
-              
-              {/* Annual Calculation Display */}
-              <div className="grid grid-cols-2 gap-4 bg-slate-900 p-3 rounded border border-slate-700">
-                 <div>
-                    <label className="block text-[10px] text-slate-500 mb-1">Nominal 1 Tahun</label>
-                    <div className="text-white font-mono text-sm">Rp {((formData.monthlyFee || 0) * 12).toLocaleString('id-ID')}</div>
-                 </div>
-                 <div>
-                    <label className="block text-[10px] text-slate-500 mb-1">Sisa Nominal Tahun Ini</label>
-                     {isEditMode ? (
-                         <input 
-                           type="number" 
-                           value={formData.remainingAnnualBalance} 
-                           onChange={e => setFormData({...formData, remainingAnnualBalance: parseInt(e.target.value)})}
-                           className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-sm focus:outline-none"
-                         />
-                     ) : (
-                        <div className="text-accent font-mono text-sm">Rp {((formData.monthlyFee || 0) * 12).toLocaleString('id-ID')}</div>
-                     )}
-                 </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button type="button" onClick={() => setAddModalOpen(false)} className="px-4 py-2 text-slate-400 hover:text-white">Batal</button>
-                <button type="submit" className="px-4 py-2 bg-accent hover:bg-sky-600 text-white rounded">Simpan</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };

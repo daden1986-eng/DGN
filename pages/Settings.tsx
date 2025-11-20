@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { Save, Upload, Building, CreditCard, User } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const { settings, setSettings } = useApp();
@@ -11,77 +12,83 @@ export const SettingsPage: React.FC = () => {
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      setForm({ ...form, logoUrl: url });
+      setForm({ ...form, logoUrl: URL.createObjectURL(e.target.files[0]) });
     }
   };
 
   const saveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     setSettings(form);
-    alert('Pengaturan berhasil disimpan!');
+    alert('Pengaturan Tersimpan!');
   };
 
+  const SectionTitle = ({ icon: Icon, title }: any) => (
+    <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-4 pb-2 border-b border-white/10">
+      <Icon size={18} className="text-sky-400"/> {title}
+    </h3>
+  );
+
+  const Input = ({ label, name }: any) => (
+    <div>
+      <label className="block text-xs font-medium text-slate-400 mb-1 ml-1">{label}</label>
+      <input name={name} value={(form as any)[name]} onChange={handleChange} className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white focus:border-sky-500/50 outline-none transition-all text-sm" />
+    </div>
+  );
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold text-white mb-6">Pengaturan Perusahaan</h2>
+    <div className="p-8 max-w-4xl mx-auto">
+      <h2 className="text-3xl font-bold text-white mb-8 tracking-tight">Pengaturan</h2>
       
-      <form onSubmit={saveSettings} className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-6 shadow-lg">
+      <form onSubmit={saveSettings} className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl space-y-8">
         
-        <div className="flex items-center space-x-6 border-b border-slate-700 pb-6">
-          <div className="w-24 h-24 bg-slate-700 rounded-full flex items-center justify-center overflow-hidden border-2 border-slate-500">
-            {form.logoUrl ? (
-              <img src={form.logoUrl} alt="Logo" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-slate-400 text-xs">No Logo</span>
-            )}
+        {/* Logo Section */}
+        <div className="flex items-center gap-6">
+          <div className="w-24 h-24 bg-black/30 rounded-2xl flex items-center justify-center overflow-hidden border border-white/10 shadow-inner">
+            {form.logoUrl ? <img src={form.logoUrl} className="w-full h-full object-cover" /> : <span className="text-xs text-slate-500">No Logo</span>}
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-2">Upload Logo</label>
-            <input type="file" accept="image/*" onChange={handleLogoUpload} className="text-slate-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-white hover:file:bg-sky-600"/>
+            <label className="cursor-pointer bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-2">
+              <Upload size={16} /> Upload Logo
+              <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden"/>
+            </label>
+            <p className="text-xs text-slate-500 mt-2">Format: PNG, JPG (Max 2MB)</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Nama Perusahaan</label>
-            <input name="name" value={form.name} onChange={handleChange} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Nomor Telepon</label>
-            <input name="phone" value={form.phone} onChange={handleChange} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm text-slate-400 mb-1">Alamat Lengkap</label>
-            <input name="address" value={form.address} onChange={handleChange} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
+        {/* Company Info */}
+        <div>
+          <SectionTitle icon={Building} title="Profil Perusahaan" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Nama Perusahaan" name="name" />
+            <Input label="Nomor Telepon" name="phone" />
+            <div className="md:col-span-2">
+              <Input label="Alamat Lengkap" name="address" />
+            </div>
           </div>
         </div>
 
-        <div className="border-t border-slate-700 pt-6">
-          <h3 className="text-white font-semibold mb-4">Informasi Pembayaran (Bank)</h3>
+        {/* Bank Info */}
+        <div>
+          <SectionTitle icon={CreditCard} title="Rekening Pembayaran" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Nama Bank</label>
-              <input name="bankName" value={form.bankName} onChange={handleChange} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">No Rekening</label>
-              <input name="accountNumber" value={form.accountNumber} onChange={handleChange} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Atas Nama</label>
-              <input name="accountHolder" value={form.accountHolder} onChange={handleChange} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
-            </div>
+            <Input label="Nama Bank" name="bankName" />
+            <Input label="No Rekening" name="accountNumber" />
+            <Input label="Atas Nama" name="accountHolder" />
           </div>
         </div>
 
-        <div className="border-t border-slate-700 pt-6">
-           <label className="block text-sm text-slate-400 mb-1">Nama Direktur (Untuk Tanda Tangan)</label>
-           <input name="directorName" value={form.directorName} onChange={handleChange} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
+        {/* Director Info */}
+        <div>
+          <SectionTitle icon={User} title="Penandatangan" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Nama Direktur" name="directorName" />
+          </div>
         </div>
 
-        <div className="pt-4">
-          <button type="submit" className="bg-accent hover:bg-sky-600 text-white px-6 py-2 rounded shadow transition">Simpan Pengaturan</button>
+        <div className="pt-4 flex justify-end">
+          <button type="submit" className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-sky-500/20 transition-all transform hover:-translate-y-1 flex items-center gap-2">
+            <Save size={18}/> Simpan Perubahan
+          </button>
         </div>
 
       </form>
