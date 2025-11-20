@@ -21,7 +21,9 @@ export interface Customer {
   phone: string;
   type: SubscriptionType;
   dueDate: number; // Day of month (1-31)
-  monthlyFee: number;
+  monthlyFee: number; // Iuran Bulanan
+  accumulatedDebt: number; // Akumulasi tunggakan jika tidak lunas
+  remainingAnnualBalance: number; // Sisa nominal tahunan (berkurang tiap bulan)
   status: 'paid' | 'unpaid';
   lastPaymentDate?: string;
 }

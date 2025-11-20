@@ -23,6 +23,8 @@ export const INITIAL_STATE: AppState = {
       type: SubscriptionType.PPPOE,
       dueDate: 5,
       monthlyFee: 150000,
+      accumulatedDebt: 0,
+      remainingAnnualBalance: 1650000, // 150k * 11 remaining
       status: 'unpaid'
     },
     {
@@ -32,6 +34,8 @@ export const INITIAL_STATE: AppState = {
       type: SubscriptionType.HOTSPOT,
       dueDate: 10,
       monthlyFee: 300000,
+      accumulatedDebt: 0,
+      remainingAnnualBalance: 3600000,
       status: 'paid',
       lastPaymentDate: '2023-10-10'
     }
